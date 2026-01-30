@@ -65,7 +65,7 @@ This fork includes comprehensive security fixes. Choose your deployment method b
 
 ---
 
-### Method 1: Standalone Docker Compose
+### Method 1: Standalone Docker Compose (Recommended)
 
 ```bash
 # 1. Clone and checkout
@@ -73,26 +73,22 @@ git clone https://github.com/egeorcun/plane.git
 cd plane
 git checkout preview
 
-# 2. Copy and configure environment
-cp .env.production.example .env
+# 2. Run the setup script (auto-generates secure passwords)
+./setup-env.sh
 
-# 3. Generate secure passwords and edit .env
-# Generate SECRET_KEY:
-python3 -c "import secrets; print(secrets.token_urlsafe(50))"
-
-# Generate passwords:
-openssl rand -base64 32
-
-# Edit .env with your values
-nano .env
-
-# 4. Build and deploy
+# 3. Build and deploy
 docker compose -f docker-compose.production.yml up -d --build
 
-# 5. Check status
+# 4. Check status
 docker compose -f docker-compose.production.yml ps
 docker compose -f docker-compose.production.yml logs -f
 ```
+
+The setup script will:
+- Generate a secure 64-character SECRET_KEY
+- Generate strong passwords for PostgreSQL, RabbitMQ, and MinIO
+- Auto-detect CPU cores for optimal worker configuration
+- Only ask for your domain name (everything else has smart defaults)
 
 ---
 

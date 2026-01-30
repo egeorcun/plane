@@ -4,11 +4,15 @@
 # This file builds images from source with security hardening.
 # Compatible with both standalone Docker Compose and Coolify.
 #
-# Usage:
-#   Standalone: docker compose -f docker-compose.production.yml up -d --build
-#   Coolify: Select this file as the Docker Compose configuration
+# QUICK START:
+#   1. Run: ./setup-env.sh
+#   2. Run: docker compose -f docker-compose.production.yml up -d --build
 #
-# IMPORTANT: Copy .env.production.example to .env and configure all values!
+# Or manually:
+#   1. Copy .env.production.example to .env
+#   2. Edit .env with your values
+#   3. Run: docker compose -f docker-compose.production.yml up -d --build
+#
 # =============================================================================
 
 # =============================================================================
