@@ -22,28 +22,34 @@ class BaseSessionAuthentication(SessionAuthentication):
         
         CSRF is bypassed only when:
         - Request contains X-Api-Key header (API token authentication)
-        - Request is an AJAX request with proper headers
+        - Request is a same-origin request (verified via Sec-Fetch-Site header)
+        - Request is an AJAX request with X-Requested-With header
         
-        All other session-based requests require CSRF validation.
+        The Sec-Fetch-Site header is automatically set by modern browsers and
+        cannot be forged by cross-origin requests, making it safe to use for
+        CSRF bypass on same-origin requests.
         """
         # Skip CSRF for API token authenticated requests
         # API tokens are not vulnerable to CSRF as they require explicit inclusion
         if request.headers.get("X-Api-Key"):
             return
         
-        # Skip CSRF for requests that explicitly indicate they're not browser-based
-        # This is safe because CSRF attacks rely on browser-initiated requests
+        # Skip CSRF for same-origin requests (modern browsers)
+        # Sec-Fetch-Site is a Fetch Metadata header that browsers set automatically
+        # It cannot be modified by JavaScript, making it a reliable indicator
+        sec_fetch_site = request.headers.get("Sec-Fetch-Site")
+        if sec_fetch_site in ("same-origin", "same-site"):
+            return
+        
+        # Skip CSRF for legacy AJAX requests with X-Requested-With header
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-            # Additional check: ensure it's from a same-origin request
             origin = request.headers.get("Origin")
             host = request.get_host()
             if origin:
                 from urllib.parse import urlparse
                 parsed_origin = urlparse(origin)
-                # Allow if origin matches the host
                 if parsed_origin.netloc == host:
                     return
         
         # For all other requests, enforce CSRF protection
-        # This includes browser-initiated requests with session cookies
         return super().enforce_csrf(request)
