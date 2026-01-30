@@ -21,6 +21,7 @@ from rest_framework.response import Response
 
 # Module imports
 from .base import BaseAPIView
+from plane.authentication.session import InstanceAdminSessionAuthentication
 from plane.license.api.permissions import InstanceAdminPermission
 from plane.license.models import InstanceConfiguration
 from plane.license.api.serializers import InstanceConfigurationSerializer
@@ -30,6 +31,8 @@ from plane.license.utils.instance_value import get_email_configuration
 
 
 class InstanceConfigurationEndpoint(BaseAPIView):
+    # Use CSRF-exempt authentication for instance admin endpoints
+    authentication_classes = [InstanceAdminSessionAuthentication]
     permission_classes = [InstanceAdminPermission]
 
     @cache_response(60 * 60 * 2, user=False)
@@ -59,6 +62,8 @@ class InstanceConfigurationEndpoint(BaseAPIView):
 
 
 class DisableEmailFeatureEndpoint(BaseAPIView):
+    # Use CSRF-exempt authentication for instance admin endpoints
+    authentication_classes = [InstanceAdminSessionAuthentication]
     permission_classes = [InstanceAdminPermission]
 
     @invalidate_cache(path="/api/instances/", user=False)

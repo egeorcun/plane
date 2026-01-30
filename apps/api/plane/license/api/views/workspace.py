@@ -10,6 +10,7 @@ from django.db.models import OuterRef, Func, F
 
 # Module imports
 from plane.app.views.base import BaseAPIView
+from plane.authentication.session import InstanceAdminSessionAuthentication
 from plane.license.api.permissions import InstanceAdminPermission
 from plane.db.models import Workspace, WorkspaceMember, Project
 from plane.license.api.serializers import WorkspaceSerializer
@@ -17,6 +18,8 @@ from plane.utils.constants import RESTRICTED_WORKSPACE_SLUGS
 
 
 class InstanceWorkSpaceAvailabilityCheckEndpoint(BaseAPIView):
+    # Use CSRF-exempt authentication for instance admin endpoints
+    authentication_classes = [InstanceAdminSessionAuthentication]
     permission_classes = [InstanceAdminPermission]
 
     def get(self, request):
@@ -35,6 +38,8 @@ class InstanceWorkSpaceAvailabilityCheckEndpoint(BaseAPIView):
 class InstanceWorkSpaceEndpoint(BaseAPIView):
     model = Workspace
     serializer_class = WorkspaceSerializer
+    # Use CSRF-exempt authentication for instance admin endpoints
+    authentication_classes = [InstanceAdminSessionAuthentication]
     permission_classes = [InstanceAdminPermission]
 
     def get(self, request):

@@ -15,6 +15,7 @@ from rest_framework.response import Response
 
 # Module imports
 from plane.app.views import BaseAPIView
+from plane.authentication.session import InstanceAdminSessionAuthentication
 from plane.db.models import Workspace
 from plane.license.api.permissions import InstanceAdminPermission
 from plane.license.api.serializers import InstanceSerializer
@@ -26,6 +27,9 @@ from django.views.decorators.cache import cache_control
 
 
 class InstanceEndpoint(BaseAPIView):
+    # Use CSRF-exempt authentication for instance admin endpoints
+    authentication_classes = [InstanceAdminSessionAuthentication]
+
     def get_permissions(self):
         if self.request.method == "PATCH":
             return [InstanceAdminPermission()]

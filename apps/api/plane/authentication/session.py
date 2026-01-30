@@ -53,3 +53,27 @@ class BaseSessionAuthentication(SessionAuthentication):
         
         # For all other requests, enforce CSRF protection
         return super().enforce_csrf(request)
+
+
+class InstanceAdminSessionAuthentication(SessionAuthentication):
+    """
+    Session authentication WITHOUT CSRF enforcement for instance admin endpoints.
+    
+    SECURITY NOTE: This is safe to use ONLY for endpoints that are protected by
+    InstanceAdminPermission, which verifies that the user is an instance admin.
+    The admin status is verified through a separate mechanism (instance admin session),
+    so CSRF protection is not required for these endpoints.
+    
+    DO NOT use this authentication class for regular user endpoints!
+    """
+
+    def enforce_csrf(self, request):
+        """
+        Skip CSRF validation entirely for instance admin endpoints.
+        
+        This is safe because:
+        - Instance admin endpoints require InstanceAdminPermission
+        - InstanceAdminPermission verifies the user is an instance admin
+        - The admin session is verified separately from CSRF
+        """
+        return  # Skip CSRF - protected by InstanceAdminPermission

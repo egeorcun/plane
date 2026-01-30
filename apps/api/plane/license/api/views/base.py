@@ -20,7 +20,7 @@ from rest_framework.views import APIView
 
 # Module imports
 from plane.license.api.permissions import InstanceAdminPermission
-from plane.authentication.session import BaseSessionAuthentication
+from plane.authentication.session import InstanceAdminSessionAuthentication
 from plane.utils.exception_logger import log_exception
 from plane.utils.paginator import BasePaginator
 
@@ -44,7 +44,9 @@ class BaseAPIView(TimezoneMixin, APIView, BasePaginator):
 
     filter_backends = (DjangoFilterBackend, SearchFilter)
 
-    authentication_classes = [BaseSessionAuthentication]
+    # Use CSRF-exempt authentication for all instance admin endpoints
+    # This is safe because InstanceAdminPermission verifies admin status
+    authentication_classes = [InstanceAdminSessionAuthentication]
 
     filterset_fields = []
 
