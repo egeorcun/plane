@@ -52,6 +52,91 @@ Getting started with Plane is simple. Choose the setup that works best for you:
 
 `Instance admins` can configure instance settings with [God mode](https://developers.plane.so/self-hosting/govern/instance-admin).
 
+## 🔒 Deploying from This Fork (Security-Hardened)
+
+This fork includes comprehensive security fixes. To deploy it on your server:
+
+### Prerequisites
+- Docker & Docker Compose installed
+- Git installed
+- Domain name with DNS configured
+
+### Quick Deployment
+
+```bash
+# 1. Clone this repository
+git clone https://github.com/egeorcun/plane.git
+cd plane
+git checkout preview
+
+# 2. Copy environment file and configure
+cp .env.example .env
+
+# 3. Edit .env with your production values (REQUIRED for security)
+nano .env
+```
+
+### Required Environment Variables
+
+**You MUST change these values for production:**
+
+```bash
+# Generate a strong secret key
+SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(50))")
+
+# Set your domain (no wildcard!)
+ALLOWED_HOSTS=your-domain.com,www.your-domain.com
+
+# Disable debug mode
+DEBUG=0
+
+# Set CORS origins (your frontend domain)
+CORS_ALLOWED_ORIGINS=https://your-domain.com
+
+# Change ALL default passwords
+POSTGRES_PASSWORD=<strong-unique-password>
+RABBITMQ_PASSWORD=<strong-unique-password>
+AWS_ACCESS_KEY_ID=<your-minio-access-key>
+AWS_SECRET_ACCESS_KEY=<your-minio-secret-key>
+```
+
+### Deploy with Docker Compose
+
+```bash
+# Build and start all services
+docker compose -f docker-compose.yml up -d
+
+# Check logs
+docker compose logs -f
+
+# The app will be available at http://localhost:80
+# For production, set up a reverse proxy with SSL (nginx/traefik/caddy)
+```
+
+### Production Checklist
+
+- [ ] SECRET_KEY is set to a strong, unique value
+- [ ] ALLOWED_HOSTS contains only your specific domains
+- [ ] DEBUG=0
+- [ ] CORS_ALLOWED_ORIGINS is set to your frontend domain(s)
+- [ ] All default passwords are changed
+- [ ] SSL/TLS is configured (HTTPS)
+- [ ] Database backups are configured
+
+### Security Features in This Fork
+
+This fork includes fixes for:
+- CSRF protection for session authentication
+- Session fixation prevention
+- SSRF protection (webhook & link crawler)
+- IDOR vulnerabilities fixed
+- Rate limiting for all endpoints
+- Secure CORS configuration
+- XSS prevention
+- Sensitive data masking in logs
+- Security headers (HSTS, X-Frame-Options, etc.)
+- OAuth security improvements
+
 ## 🌟 Features
 
 - **Work Items**
