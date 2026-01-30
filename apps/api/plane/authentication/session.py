@@ -2,24 +2,60 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-import os
+from urllib.parse import urlparse
 from rest_framework.authentication import SessionAuthentication
 
 
 class BaseSessionAuthentication(SessionAuthentication):
     """
     Custom session authentication that enforces CSRF protection for browser-based
-    sessions while allowing API token authentication to bypass CSRF.
+    sessions while allowing same-origin requests to bypass CSRF.
     
     SECURITY NOTE: CSRF protection is essential for cookie-based authentication
-    to prevent cross-site request forgery attacks. We only skip CSRF for requests
-    that use API token authentication (X-Api-Key header), as those are not 
-    vulnerable to CSRF attacks.
+    to prevent cross-site request forgery attacks. We skip CSRF for requests
+    that can be verified as same-origin through various headers.
     
-    For self-hosted deployments behind reverse proxies (Cloudflare, Nginx, etc.)
-    that may strip security headers, set CSRF_TRUSTED_PROXY=1 to relax CSRF checks
-    for authenticated sessions.
+    Same-origin verification methods (in order of preference):
+    1. Sec-Fetch-Site header (modern browsers, may be stripped by proxies)
+    2. Referer header (reliably passed through most proxies)
+    3. Origin header (sent with POST/PUT/DELETE requests)
+    4. X-Api-Key header (API token authentication)
     """
+
+    def _is_same_origin(self, request):
+        """
+        Check if the request is from the same origin using available headers.
+        Returns True if the request can be verified as same-origin.
+        
+        Multiple headers are checked because reverse proxies (Cloudflare, Nginx, etc.)
+        may strip some headers but typically preserve Referer and Origin.
+        """
+        host = request.get_host()
+        
+        # Method 1: Sec-Fetch-Site header (most reliable when available)
+        # Set automatically by modern browsers, cannot be modified by JavaScript
+        sec_fetch_site = request.headers.get("Sec-Fetch-Site")
+        if sec_fetch_site in ("same-origin", "same-site"):
+            return True
+        
+        # Method 2: Referer header (reliably passed through proxies)
+        # Browsers automatically set this for same-origin requests
+        # Cannot be forged by cross-origin JavaScript
+        referer = request.headers.get("Referer")
+        if referer:
+            parsed_referer = urlparse(referer)
+            if parsed_referer.netloc == host:
+                return True
+        
+        # Method 3: Origin header (sent with POST/PUT/DELETE requests)
+        # Also set automatically by browsers, cannot be forged
+        origin = request.headers.get("Origin")
+        if origin:
+            parsed_origin = urlparse(origin)
+            if parsed_origin.netloc == host:
+                return True
+        
+        return False
 
     def enforce_csrf(self, request):
         """
@@ -27,50 +63,20 @@ class BaseSessionAuthentication(SessionAuthentication):
         
         CSRF is bypassed when:
         - Request contains X-Api-Key header (API token authentication)
-        - Request is a same-origin request (verified via Sec-Fetch-Site header)
-        - Request is an AJAX request with X-Requested-With header from same origin
-        - CSRF_TRUSTED_PROXY=1 and user has valid session (self-hosted behind proxy)
+        - Request is verified as same-origin via Sec-Fetch-Site, Referer, or Origin headers
         
-        The Sec-Fetch-Site header is automatically set by modern browsers and
-        cannot be forged by cross-origin requests, making it safe to use for
-        CSRF bypass on same-origin requests.
+        This approach provides CSRF protection while working with reverse proxies
+        that may strip certain headers.
         """
         # Skip CSRF for API token authenticated requests
         # API tokens are not vulnerable to CSRF as they require explicit inclusion
         if request.headers.get("X-Api-Key"):
             return
         
-        # Skip CSRF for same-origin requests (modern browsers)
-        # Sec-Fetch-Site is a Fetch Metadata header that browsers set automatically
-        # It cannot be modified by JavaScript, making it a reliable indicator
-        sec_fetch_site = request.headers.get("Sec-Fetch-Site")
-        if sec_fetch_site in ("same-origin", "same-site"):
+        # Skip CSRF for verified same-origin requests
+        # This checks Sec-Fetch-Site, Referer, and Origin headers
+        if self._is_same_origin(request):
             return
-        
-        # Skip CSRF for legacy AJAX requests with X-Requested-With header
-        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-            origin = request.headers.get("Origin")
-            host = request.get_host()
-            if origin:
-                from urllib.parse import urlparse
-                parsed_origin = urlparse(origin)
-                if parsed_origin.netloc == host:
-                    return
-        
-        # For self-hosted deployments behind proxies that strip headers,
-        # allow CSRF bypass for authenticated sessions when CSRF_TRUSTED_PROXY=1
-        # This is safe because:
-        # - Session cookies are HttpOnly and Secure (when properly configured)
-        # - The user has already authenticated via login (which has its own CSRF)
-        # - Self-hosted deployments typically have network-level security
-        if os.environ.get("CSRF_TRUSTED_PROXY", "0") == "1":
-            # Check if user has a valid session (cookie-based authentication)
-            if hasattr(request, 'session') and request.session.session_key:
-                return
-            # Also check if session was already authenticated by DRF
-            if hasattr(request, '_request') and hasattr(request._request, 'session'):
-                if request._request.session.session_key:
-                    return
         
         # For all other requests, enforce CSRF protection
         return super().enforce_csrf(request)
