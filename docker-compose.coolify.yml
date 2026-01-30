@@ -47,8 +47,9 @@ x-app-env: &app-env
   # Coolify generates SERVICE_URL_PROXY with https:// scheme based on domain config
   WEB_URL: $SERVICE_URL_PROXY
   DEBUG: '${DEBUG:-0}'
-  # CORS uses the same URL as WEB_URL
+  # CORS and CSRF use the same URL as WEB_URL
   CORS_ALLOWED_ORIGINS: $SERVICE_URL_PROXY
+  CSRF_TRUSTED_ORIGINS: $SERVICE_URL_PROXY
   GUNICORN_WORKERS: '${GUNICORN_WORKERS:-2}'
   USE_MINIO: '${USE_MINIO:-1}'
   DATABASE_URL: 'postgresql://$SERVICE_USER_POSTGRES:$SERVICE_PASSWORD_POSTGRES@plane-db/plane'
