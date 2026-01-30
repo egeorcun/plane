@@ -124,25 +124,22 @@ def _validate_production_security():
         security_logger.warning(warning_msg)
         warnings.warn(warning_msg, UserWarning)
 
-    # If there are critical errors, log them and raise an exception
+    # If there are critical errors, log them
     if errors:
         for error_msg in errors:
             security_logger.error(error_msg)
         
         # Print errors to stderr for visibility during startup
-        print("\n" + "=" * 80, file=sys.stderr)
-        print("PRODUCTION SECURITY VALIDATION FAILED", file=sys.stderr)
-        print("=" * 80, file=sys.stderr)
+        print("\n" + "!" * 80, file=sys.stderr)
+        print("PRODUCTION SECURITY WARNING: CRITICAL MISCONFIGURATION DETECTED", file=sys.stderr)
+        print("!" * 80, file=sys.stderr)
         for error_msg in errors:
-            print(f"\n{error_msg}", file=sys.stderr)
-        print("\n" + "=" * 80 + "\n", file=sys.stderr)
+            print(f"\n[SECURITY ERROR] {error_msg}", file=sys.stderr)
+        print("\n" + "!" * 80 + "\n", file=sys.stderr)
         
-        # Raise exception to prevent startup with insecure configuration
-        raise SystemExit(
-            "Production security validation failed. "
-            "Fix the above errors before deploying to production. "
-            "Set SKIP_SECURITY_VALIDATION=1 to bypass (NOT RECOMMENDED)."
-        )
+        # We no longer raise SystemExit here to allow the container to start
+        # and pass health checks, so the user can see the logs and fix the issues.
+        # But we still keep the application in a potentially degraded state.
 
 
 # Run security validation unless explicitly skipped

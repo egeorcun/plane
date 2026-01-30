@@ -56,7 +56,7 @@ x-app-env: &app-env
   USE_MINIO: ${USE_MINIO:-1}
   SECRET_KEY: ${SERVICE_PASSWORD_64_SECRET:-${SECRET_KEY:-}}
   DEBUG: ${DEBUG:-0}
-  ALLOWED_HOSTS: ${SERVICE_FQDN_PLANE:-${ALLOWED_HOSTS:-localhost}}
+  ALLOWED_HOSTS: ${SERVICE_FQDN_PLANE:-${ALLOWED_HOSTS:-localhost}},localhost,127.0.0.1
   CORS_ALLOWED_ORIGINS: ${SERVICE_URL_PLANE:-${CORS_ALLOWED_ORIGINS:-http://localhost}}
   DATABASE_URL: postgresql://${SERVICE_USER_POSTGRES:-${POSTGRES_USER:-plane}}:${SERVICE_PASSWORD_POSTGRES:-${POSTGRES_PASSWORD:-plane}}@plane-db/${POSTGRES_DB:-plane}
   AMQP_URL: amqp://${SERVICE_USER_RABBITMQ:-${RABBITMQ_USER:-plane}}:${SERVICE_PASSWORD_RABBITMQ:-${RABBITMQ_PASSWORD:-plane}}@plane-mq:${RABBITMQ_PORT:-5672}/${RABBITMQ_VHOST:-plane}
@@ -92,7 +92,7 @@ services:
       live:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:80/"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:80/ || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -105,7 +105,7 @@ services:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -118,7 +118,7 @@ services:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -131,7 +131,7 @@ services:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -148,7 +148,7 @@ services:
       plane-redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -172,11 +172,11 @@ services:
       migrator:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/')"]
-      interval: 10s
+      test: ["CMD-SHELL", "python -c 'import urllib.request; resp = urllib.request.urlopen(\"http://localhost:8000/api/v1/health/\"); exit(0 if resp.status == 200 else 1)' || exit 1"]
+      interval: 15s
       timeout: 10s
       retries: 10
-      start_period: 30s
+      start_period: 45s
 
   worker:
     image: ghcr.io/egeorcun/plane-backend:${APP_RELEASE:-latest}
