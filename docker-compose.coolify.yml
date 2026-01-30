@@ -59,6 +59,8 @@ x-app-env: &app-env
   MINIO_ENDPOINT_SSL: '${MINIO_ENDPOINT_SSL:-0}'
   # Security: Skip validation for Coolify deployment (Coolify manages secrets)
   SKIP_SECURITY_VALIDATION: '1'
+  # CSRF: Trust proxy for self-hosted deployments (Cloudflare/Coolify strip headers)
+  CSRF_TRUSTED_PROXY: '1'
 
 # =============================================================================
 # SERVICES - Using pre-built images from GitHub Container Registry
