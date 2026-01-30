@@ -54,88 +54,134 @@ Getting started with Plane is simple. Choose the setup that works best for you:
 
 ## 🔒 Deploying from This Fork (Security-Hardened)
 
-This fork includes comprehensive security fixes. To deploy it on your server:
+This fork includes comprehensive security fixes. Choose your deployment method below.
 
 ### Prerequisites
-- Docker & Docker Compose installed
-- Git installed
-- Domain name with DNS configured
 
-### Quick Deployment
+- Docker & Docker Compose v2+
+- Git
+- Domain name with DNS configured
+- Minimum 2 vCPUs, 4GB RAM (8GB recommended)
+
+---
+
+### Method 1: Standalone Docker Compose
 
 ```bash
-# 1. Clone this repository
+# 1. Clone and checkout
 git clone https://github.com/egeorcun/plane.git
 cd plane
 git checkout preview
 
-# 2. Copy environment file and configure
-cp .env.example .env
+# 2. Copy and configure environment
+cp .env.production.example .env
 
-# 3. Edit .env with your production values (REQUIRED for security)
+# 3. Generate secure passwords and edit .env
+# Generate SECRET_KEY:
+python3 -c "import secrets; print(secrets.token_urlsafe(50))"
+
+# Generate passwords:
+openssl rand -base64 32
+
+# Edit .env with your values
 nano .env
+
+# 4. Build and deploy
+docker compose -f docker-compose.production.yml up -d --build
+
+# 5. Check status
+docker compose -f docker-compose.production.yml ps
+docker compose -f docker-compose.production.yml logs -f
 ```
+
+---
+
+### Method 2: Coolify Deployment
+
+1. **Add Application in Coolify**
+   - Source: Git Repository
+   - Repository: `https://github.com/egeorcun/plane.git`
+   - Branch: `preview`
+   - Build Pack: Docker Compose
+   - Docker Compose File: `docker-compose.production.yml`
+
+2. **Configure Environment Variables**
+
+   In Coolify's environment settings, add these variables:
+
+   ```bash
+   # Use Coolify's auto-generated service variables
+   SECRET_KEY=${SERVICE_PASSWORD_64_SECRETKEY}
+   
+   # Database
+   POSTGRES_USER=${SERVICE_USER_POSTGRES}
+   POSTGRES_PASSWORD=${SERVICE_PASSWORD_POSTGRES}
+   POSTGRES_DB=plane
+   
+   # Message Queue
+   RABBITMQ_USER=${SERVICE_USER_RABBITMQ}
+   RABBITMQ_PASSWORD=${SERVICE_PASSWORD_RABBITMQ}
+   RABBITMQ_VHOST=plane
+   
+   # Object Storage
+   AWS_ACCESS_KEY_ID=${SERVICE_USER_MINIO}
+   AWS_SECRET_ACCESS_KEY=${SERVICE_PASSWORD_MINIO}
+   AWS_S3_ENDPOINT_URL=http://plane-minio:9000
+   AWS_S3_BUCKET_NAME=uploads
+   USE_MINIO=1
+   
+   # Application URLs (Coolify provides these)
+   WEB_URL=${SERVICE_URL_PLANE}
+   CORS_ALLOWED_ORIGINS=${SERVICE_URL_PLANE}
+   ALLOWED_HOSTS=${SERVICE_FQDN_PLANE}
+   
+   # Security
+   DEBUG=0
+   ```
+
+3. **Deploy** - Coolify will build from source and start all services
+
+---
 
 ### Required Environment Variables
 
-**You MUST change these values for production:**
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `SECRET_KEY` | Django secret (50+ chars) | `openssl rand -base64 50` |
+| `ALLOWED_HOSTS` | Your domain(s) | `plane.example.com` |
+| `CORS_ALLOWED_ORIGINS` | Frontend URL | `https://plane.example.com` |
+| `DEBUG` | Must be `0` | `0` |
+| `POSTGRES_PASSWORD` | DB password | Strong random string |
+| `RABBITMQ_PASSWORD` | MQ password | Strong random string |
+| `AWS_ACCESS_KEY_ID` | MinIO access key | Random hex string |
+| `AWS_SECRET_ACCESS_KEY` | MinIO secret key | Strong random string |
 
-```bash
-# Generate a strong secret key
-SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(50))")
-
-# Set your domain (no wildcard!)
-ALLOWED_HOSTS=your-domain.com,www.your-domain.com
-
-# Disable debug mode
-DEBUG=0
-
-# Set CORS origins (your frontend domain)
-CORS_ALLOWED_ORIGINS=https://your-domain.com
-
-# Change ALL default passwords
-POSTGRES_PASSWORD=<strong-unique-password>
-RABBITMQ_PASSWORD=<strong-unique-password>
-AWS_ACCESS_KEY_ID=<your-minio-access-key>
-AWS_SECRET_ACCESS_KEY=<your-minio-secret-key>
-```
-
-### Deploy with Docker Compose
-
-```bash
-# Build and start all services
-docker compose -f docker-compose.yml up -d
-
-# Check logs
-docker compose logs -f
-
-# The app will be available at http://localhost:80
-# For production, set up a reverse proxy with SSL (nginx/traefik/caddy)
-```
+---
 
 ### Production Checklist
 
-- [ ] SECRET_KEY is set to a strong, unique value
-- [ ] ALLOWED_HOSTS contains only your specific domains
-- [ ] DEBUG=0
-- [ ] CORS_ALLOWED_ORIGINS is set to your frontend domain(s)
-- [ ] All default passwords are changed
-- [ ] SSL/TLS is configured (HTTPS)
+- [ ] `SECRET_KEY` is set (50+ characters, unique)
+- [ ] `ALLOWED_HOSTS` contains only your specific domain(s)
+- [ ] `DEBUG=0`
+- [ ] `CORS_ALLOWED_ORIGINS` matches your frontend URL
+- [ ] All passwords are strong and unique
+- [ ] SSL/TLS is configured (via Coolify or reverse proxy)
 - [ ] Database backups are configured
+- [ ] Firewall only exposes ports 80/443
+
+---
 
 ### Security Features in This Fork
 
-This fork includes fixes for:
-- CSRF protection for session authentication
-- Session fixation prevention
-- SSRF protection (webhook & link crawler)
-- IDOR vulnerabilities fixed
-- Rate limiting for all endpoints
-- Secure CORS configuration
-- XSS prevention
-- Sensitive data masking in logs
-- Security headers (HSTS, X-Frame-Options, etc.)
-- OAuth security improvements
+| Category | Fix |
+|----------|-----|
+| Authentication | CSRF protection, session fixation prevention |
+| Input Validation | SSRF protection (webhooks, link crawler) |
+| Authorization | IDOR vulnerabilities fixed |
+| Rate Limiting | All endpoints protected |
+| Headers | HSTS, X-Frame-Options, CSP |
+| Logging | Sensitive data masking |
+| OAuth | Timing attack prevention, token expiration fix |
 
 ## 🌟 Features
 
