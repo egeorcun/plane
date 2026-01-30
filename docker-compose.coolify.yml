@@ -56,8 +56,9 @@ x-app-env: &app-env
   USE_MINIO: ${USE_MINIO:-1}
   SECRET_KEY: ${SERVICE_PASSWORD_64_SECRET:-${SECRET_KEY:-}}
   DEBUG: ${DEBUG:-0}
-  ALLOWED_HOSTS: ${SERVICE_FQDN_PLANE:-},${SERVICE_FQDN_PROXY:-},${ALLOWED_HOSTS:-localhost},localhost,127.0.0.1
-  CORS_ALLOWED_ORIGINS: ${SERVICE_URL_PLANE:-},https://${SERVICE_FQDN_PROXY:-localhost},${CORS_ALLOWED_ORIGINS:-http://localhost}
+  ALLOWED_HOSTS: ${SERVICE_FQDN_PLANE:-${ALLOWED_HOSTS:-localhost}},localhost,127.0.0.1
+  # Use SERVICE_URL_PLANE because it includes the scheme (http/https) required by Django.
+  CORS_ALLOWED_ORIGINS: ${SERVICE_URL_PLANE:-${CORS_ALLOWED_ORIGINS:-http://localhost}}
   DATABASE_URL: postgresql://${SERVICE_USER_POSTGRES:-${POSTGRES_USER:-plane}}:${SERVICE_PASSWORD_POSTGRES:-${POSTGRES_PASSWORD:-plane}}@plane-db/${POSTGRES_DB:-plane}
   AMQP_URL: amqp://${SERVICE_USER_RABBITMQ:-${RABBITMQ_USER:-plane}}:${SERVICE_PASSWORD_RABBITMQ:-${RABBITMQ_PASSWORD:-plane}}@plane-mq:${RABBITMQ_PORT:-5672}/${RABBITMQ_VHOST:-plane}
   API_KEY_RATE_LIMIT: ${API_KEY_RATE_LIMIT:-60/minute}
@@ -75,6 +76,9 @@ services:
     ports:
       - "${LISTEN_HTTP_PORT:-80}:80"
     environment:
+      SERVICE_URL_PLANE: ${SERVICE_URL_PLANE:-http://localhost}
+      APP_DOMAIN: ${SERVICE_URL_PLANE:-http://localhost}
+      SITE_ADDRESS: ":80"
       FILE_SIZE_LIMIT: ${FILE_SIZE_LIMIT:-5242880}
       BUCKET_NAME: ${AWS_S3_BUCKET_NAME:-uploads}
     labels:
