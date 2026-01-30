@@ -92,50 +92,39 @@ The setup script will:
 
 ---
 
-### Method 2: Coolify Deployment
+### Method 2: Coolify Deployment (Zero Config)
+
+Coolify automatically generates all passwords and credentials. You just need to:
 
 1. **Add Application in Coolify**
    - Source: Git Repository
    - Repository: `https://github.com/egeorcun/plane.git`
    - Branch: `preview`
-   - Build Pack: Docker Compose
-   - Docker Compose File: `docker-compose.production.yml`
+   - Build Pack: **Docker Compose**
+   - Docker Compose File: **`docker-compose.production.yml`**
 
-2. **Configure Environment Variables**
+2. **That's it!** Deploy directly.
 
-   In Coolify's environment settings, add these variables:
+   Coolify auto-generates these `SERVICE_*` variables:
+   | Coolify Variable | Used For |
+   |------------------|----------|
+   | `SERVICE_PASSWORD_64_SECRET` | Django SECRET_KEY |
+   | `SERVICE_USER_POSTGRES` | PostgreSQL username |
+   | `SERVICE_PASSWORD_POSTGRES` | PostgreSQL password |
+   | `SERVICE_USER_RABBITMQ` | RabbitMQ username |
+   | `SERVICE_PASSWORD_RABBITMQ` | RabbitMQ password |
+   | `SERVICE_USER_MINIO` | MinIO access key |
+   | `SERVICE_PASSWORD_MINIO` | MinIO secret key |
+   | `SERVICE_FQDN_PLANE` | Your domain (auto from Coolify) |
+   | `SERVICE_URL_PLANE` | Full URL with https:// |
 
+3. **Optional overrides** (only if needed):
    ```bash
-   # Use Coolify's auto-generated service variables
-   SECRET_KEY=${SERVICE_PASSWORD_64_SECRETKEY}
-   
-   # Database
-   POSTGRES_USER=${SERVICE_USER_POSTGRES}
-   POSTGRES_PASSWORD=${SERVICE_PASSWORD_POSTGRES}
-   POSTGRES_DB=plane
-   
-   # Message Queue
-   RABBITMQ_USER=${SERVICE_USER_RABBITMQ}
-   RABBITMQ_PASSWORD=${SERVICE_PASSWORD_RABBITMQ}
-   RABBITMQ_VHOST=plane
-   
-   # Object Storage
-   AWS_ACCESS_KEY_ID=${SERVICE_USER_MINIO}
-   AWS_SECRET_ACCESS_KEY=${SERVICE_PASSWORD_MINIO}
-   AWS_S3_ENDPOINT_URL=http://plane-minio:9000
-   AWS_S3_BUCKET_NAME=uploads
-   USE_MINIO=1
-   
-   # Application URLs (Coolify provides these)
-   WEB_URL=${SERVICE_URL_PLANE}
-   CORS_ALLOWED_ORIGINS=${SERVICE_URL_PLANE}
-   ALLOWED_HOSTS=${SERVICE_FQDN_PLANE}
-   
-   # Security
+   # Only set these if you want custom values
    DEBUG=0
+   GUNICORN_WORKERS=4
+   FILE_SIZE_LIMIT=10485760
    ```
-
-3. **Deploy** - Coolify will build from source and start all services
 
 ---
 
