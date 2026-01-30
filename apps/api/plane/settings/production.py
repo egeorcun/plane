@@ -47,15 +47,24 @@ def _validate_production_security():
             "Consider using a stronger key for better security."
         )
 
-    # -------------------------------------------------------------------------
     # 2. ALLOWED_HOSTS Validation
     # -------------------------------------------------------------------------
     # Using "*" for ALLOWED_HOSTS is dangerous in production as it allows
     # HTTP Host header attacks. Always specify explicit hostnames.
-    allowed_hosts_env = os.environ.get("ALLOWED_HOSTS", "*")
-    if allowed_hosts_env == "*" or "*" in allowed_hosts_env.split(","):
+    allowed_hosts_env = os.environ.get("ALLOWED_HOSTS", "")
+    
+    # Always allow localhost and 127.0.0.1 for internal health checks
+    if "localhost" not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append("localhost")
+    if "127.0.0.1" not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append("127.0.0.1")
+
+    # If it's empty or *, it's insecure. But if it contains at least one real domain, it's okay.
+    hosts_list = [h.strip() for h in allowed_hosts_env.split(",") if h.strip() and h.strip() != "*"]
+    
+    if not hosts_list:
         errors.append(
-            "CRITICAL: ALLOWED_HOSTS is set to '*' which is insecure for production. "
+            "CRITICAL: ALLOWED_HOSTS is not set or only contains '*' or is empty. "
             "Set ALLOWED_HOSTS to your specific domain(s), e.g., 'example.com,www.example.com'. "
             "This prevents HTTP Host header attacks."
         )
