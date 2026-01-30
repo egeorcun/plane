@@ -102,7 +102,7 @@ x-app-env: &app-env
 
 services:
   # ---------------------------------------------------------------------------
-  # REVERSE PROXY (Caddy)
+  # REVERSE PROXY (Caddy) - Main entry point, receives the public domain
   # ---------------------------------------------------------------------------
   proxy:
     container_name: plane-proxy
@@ -118,6 +118,10 @@ services:
     environment:
       FILE_SIZE_LIMIT: ${FILE_SIZE_LIMIT:-5242880}
       BUCKET_NAME: ${AWS_S3_BUCKET_NAME:-uploads}
+    # Coolify labels - marks this as the main public service
+    labels:
+      - "coolify.managed=true"
+      - "coolify.proxy=true"
     depends_on:
       web:
         condition: service_healthy
