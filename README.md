@@ -92,20 +92,24 @@ The setup script will:
 
 ---
 
-### Method 2: Coolify Deployment (Zero Config)
+### Method 2: Coolify Deployment (Recommended - Pre-built Images)
 
-Coolify automatically generates all passwords and credentials. You just need to:
+Uses pre-built images from GitHub Container Registry - fast deployment, no build required!
 
 1. **Add Application in Coolify**
    - Source: Git Repository
    - Repository: `https://github.com/egeorcun/plane.git`
    - Branch: `preview`
    - Build Pack: **Docker Compose**
-   - Docker Compose File: **`docker-compose.production.yml`**
+   - Docker Compose File: **`docker-compose.coolify.yml`** (NOT production.yml!)
 
-2. **That's it!** Deploy directly.
+2. **Set domain for proxy only**
+   - "Domains for proxy": `plane.your-domain.com`
+   - Leave all other domain fields **empty**
 
-   Coolify auto-generates these `SERVICE_*` variables:
+3. **Deploy!** - No build needed, just pulls pre-built images
+
+   Coolify auto-generates all credentials:
    | Coolify Variable | Used For |
    |------------------|----------|
    | `SERVICE_PASSWORD_64_SECRET` | Django SECRET_KEY |
@@ -115,16 +119,14 @@ Coolify automatically generates all passwords and credentials. You just need to:
    | `SERVICE_PASSWORD_RABBITMQ` | RabbitMQ password |
    | `SERVICE_USER_MINIO` | MinIO access key |
    | `SERVICE_PASSWORD_MINIO` | MinIO secret key |
-   | `SERVICE_FQDN_PLANE` | Your domain (auto from Coolify) |
-   | `SERVICE_URL_PLANE` | Full URL with https:// |
 
-3. **Optional overrides** (only if needed):
-   ```bash
-   # Only set these if you want custom values
-   DEBUG=0
-   GUNICORN_WORKERS=4
-   FILE_SIZE_LIMIT=10485760
-   ```
+### Method 3: Coolify with Build from Source
+
+If you want to build from source (requires 8GB+ RAM on build server):
+
+1. Use **`docker-compose.production.yml`** instead
+2. Increase Coolify's build timeout and memory limits
+3. Be patient - first build takes 15-30 minutes
 
 ---
 
