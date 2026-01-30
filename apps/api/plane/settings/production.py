@@ -5,14 +5,191 @@
 """Production settings"""
 
 import os
+import sys
+import logging
+import warnings
 
 from .common import *  # noqa
+
+# =============================================================================
+# PRODUCTION SECURITY VALIDATION
+# =============================================================================
+# These checks run at startup to ensure critical security settings are configured
+# properly. Missing or insecure configurations will raise errors or warnings.
+# =============================================================================
+
+
+def _validate_production_security():
+    """
+    Validates critical security settings for production deployment.
+    This function runs at module load time to catch misconfigurations early.
+    """
+    security_logger = logging.getLogger("plane.security")
+    errors = []
+    warnings_list = []
+
+    # -------------------------------------------------------------------------
+    # 1. SECRET_KEY Validation
+    # -------------------------------------------------------------------------
+    # SECRET_KEY must be explicitly set in production. Using Django's random
+    # key generation is dangerous because it changes on every restart, which
+    # invalidates all sessions and tokens.
+    secret_key_env = os.environ.get("SECRET_KEY", "")
+    if not secret_key_env:
+        errors.append(
+            "CRITICAL: SECRET_KEY environment variable is not set. "
+            "Production deployments MUST have a strong, unique SECRET_KEY. "
+            "Generate one with: python -c \"from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())\""
+        )
+    elif len(secret_key_env) < 32:
+        warnings_list.append(
+            "WARNING: SECRET_KEY appears to be weak (less than 32 characters). "
+            "Consider using a stronger key for better security."
+        )
+
+    # -------------------------------------------------------------------------
+    # 2. ALLOWED_HOSTS Validation
+    # -------------------------------------------------------------------------
+    # Using "*" for ALLOWED_HOSTS is dangerous in production as it allows
+    # HTTP Host header attacks. Always specify explicit hostnames.
+    allowed_hosts_env = os.environ.get("ALLOWED_HOSTS", "*")
+    if allowed_hosts_env == "*" or "*" in allowed_hosts_env.split(","):
+        errors.append(
+            "CRITICAL: ALLOWED_HOSTS is set to '*' which is insecure for production. "
+            "Set ALLOWED_HOSTS to your specific domain(s), e.g., 'example.com,www.example.com'. "
+            "This prevents HTTP Host header attacks."
+        )
+
+    # -------------------------------------------------------------------------
+    # 3. DEBUG Mode Validation
+    # -------------------------------------------------------------------------
+    # DEBUG mode should never be enabled in production as it exposes sensitive
+    # information including full tracebacks, settings, and more.
+    debug_env = os.environ.get("DEBUG", "0")
+    if debug_env == "1" or debug_env.lower() == "true":
+        errors.append(
+            "CRITICAL: DEBUG mode is enabled in production! "
+            "Set DEBUG=0 in your environment variables. "
+            "Running with DEBUG=1 exposes sensitive information to attackers."
+        )
+
+    # -------------------------------------------------------------------------
+    # 4. Default Credentials Check
+    # -------------------------------------------------------------------------
+    # Check for default/insecure credentials that ship with the example configs.
+    # These should always be changed in production.
+    default_credentials = [
+        ("POSTGRES_PASSWORD", "plane", "database password"),
+        ("RABBITMQ_PASSWORD", "plane", "RabbitMQ password"),
+        ("RABBITMQ_PASSWORD", "guest", "RabbitMQ password"),
+        ("AWS_ACCESS_KEY_ID", "access-key", "MinIO/AWS access key"),
+        ("AWS_SECRET_ACCESS_KEY", "secret-key", "MinIO/AWS secret key"),
+    ]
+
+    for env_var, default_value, description in default_credentials:
+        current_value = os.environ.get(env_var, "")
+        if current_value == default_value:
+            warnings_list.append(
+                f"WARNING: {env_var} is using the default value '{default_value}'. "
+                f"Change the {description} to a secure, unique value for production."
+            )
+
+    # -------------------------------------------------------------------------
+    # 5. CORS Configuration Check
+    # -------------------------------------------------------------------------
+    # CORS_ALLOWED_ORIGINS should be explicitly set in production.
+    # Using CORS_ALLOW_ALL_ORIGINS is dangerous.
+    cors_origins = os.environ.get("CORS_ALLOWED_ORIGINS", "")
+    if not cors_origins:
+        warnings_list.append(
+            "WARNING: CORS_ALLOWED_ORIGINS is not set. "
+            "This means all origins are allowed, which is insecure for production. "
+            "Set CORS_ALLOWED_ORIGINS to your specific frontend domain(s)."
+        )
+
+    # -------------------------------------------------------------------------
+    # Log and Handle Validation Results
+    # -------------------------------------------------------------------------
+    # Log all warnings
+    for warning_msg in warnings_list:
+        security_logger.warning(warning_msg)
+        warnings.warn(warning_msg, UserWarning)
+
+    # If there are critical errors, log them and raise an exception
+    if errors:
+        for error_msg in errors:
+            security_logger.error(error_msg)
+        
+        # Print errors to stderr for visibility during startup
+        print("\n" + "=" * 80, file=sys.stderr)
+        print("PRODUCTION SECURITY VALIDATION FAILED", file=sys.stderr)
+        print("=" * 80, file=sys.stderr)
+        for error_msg in errors:
+            print(f"\n{error_msg}", file=sys.stderr)
+        print("\n" + "=" * 80 + "\n", file=sys.stderr)
+        
+        # Raise exception to prevent startup with insecure configuration
+        raise SystemExit(
+            "Production security validation failed. "
+            "Fix the above errors before deploying to production. "
+            "Set SKIP_SECURITY_VALIDATION=1 to bypass (NOT RECOMMENDED)."
+        )
+
+
+# Run security validation unless explicitly skipped
+# SKIP_SECURITY_VALIDATION should ONLY be used for testing/CI, never in production
+if os.environ.get("SKIP_SECURITY_VALIDATION", "0") != "1":
+    _validate_production_security()
+
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = int(os.environ.get("DEBUG", 0)) == 1
 
 # Honor the 'X-Forwarded-Proto' header for request.is_secure()
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# =============================================================================
+# SECURITY HEADERS
+# =============================================================================
+# These headers provide additional security protections against common attacks.
+# =============================================================================
+
+# HSTS (HTTP Strict Transport Security)
+# Forces browsers to use HTTPS for all subsequent requests
+SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS", 31536000))  # 1 year
+SECURE_HSTS_INCLUDE_SUBDOMAINS = os.environ.get("SECURE_HSTS_INCLUDE_SUBDOMAINS", "1") == "1"
+SECURE_HSTS_PRELOAD = os.environ.get("SECURE_HSTS_PRELOAD", "0") == "1"
+
+# Content Type Sniffing Protection
+# Prevents browsers from MIME-sniffing responses away from declared content-type
+SECURE_CONTENT_TYPE_NOSNIFF = True
+
+# X-Frame-Options
+# Prevents clickjacking attacks by controlling if page can be embedded in frames
+X_FRAME_OPTIONS = os.environ.get("X_FRAME_OPTIONS", "DENY")
+
+# SSL/HTTPS Settings
+# Redirect all HTTP requests to HTTPS
+SECURE_SSL_REDIRECT = os.environ.get("SECURE_SSL_REDIRECT", "0") == "1"
+
+# Cross-site Scripting (XSS) Filter
+# Note: This is largely obsolete with modern browsers, but doesn't hurt
+SECURE_BROWSER_XSS_FILTER = True
+
+# Referrer Policy
+# Controls how much referrer information is sent with requests
+SECURE_REFERRER_POLICY = os.environ.get("SECURE_REFERRER_POLICY", "strict-origin-when-cross-origin")
+
+# =============================================================================
+# CORS ENFORCEMENT FOR PRODUCTION
+# =============================================================================
+# Override common.py CORS settings to be more restrictive in production
+# =============================================================================
+if not os.environ.get("CORS_ALLOWED_ORIGINS"):
+    # In production without explicit CORS origins, restrict to same-origin only
+    # This is a safety measure - explicit configuration is always preferred
+    CORS_ALLOW_ALL_ORIGINS = False
+    CORS_ALLOWED_ORIGINS = []
 
 INSTALLED_APPS += ("scout_apm.django",)  # noqa
 

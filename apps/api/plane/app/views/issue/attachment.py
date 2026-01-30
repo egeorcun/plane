@@ -60,7 +60,19 @@ class IssueAttachmentEndpoint(BaseAPIView):
 
     @allow_permission([ROLE.ADMIN], creator=True, model=FileAsset)
     def delete(self, request, slug, project_id, issue_id, pk):
-        issue_attachment = FileAsset.objects.get(pk=pk)
+        """
+        Delete an issue attachment.
+        
+        SECURITY: Filter by workspace slug, project_id, and issue_id to prevent IDOR.
+        This ensures users can only delete attachments from issues they have access to.
+        """
+        # SECURITY FIX: Add workspace, project, and issue filters to prevent IDOR
+        issue_attachment = FileAsset.objects.get(
+            pk=pk,
+            workspace__slug=slug,
+            project_id=project_id,
+            issue_id=issue_id
+        )
         issue_attachment.asset.delete(save=False)
         issue_attachment.delete()
         issue_activity.delay(

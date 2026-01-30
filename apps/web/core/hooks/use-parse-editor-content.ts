@@ -76,8 +76,22 @@ export const useParseEditorContent = (args: TArgs) => {
           const div = doc.createElement("div");
           div.setAttribute("data-node-type", "code-block");
           div.setAttribute("class", "courier");
-          // transfer the content from the code block
-          div.innerHTML = codeElement.innerHTML.replace(/\n/g, "<br>") || "";
+          
+          // SECURITY: Use textContent instead of innerHTML to prevent XSS
+          // Get the text content and manually handle line breaks safely
+          const textContent = codeElement.textContent || "";
+          // Split by newlines and create text nodes with br elements
+          const lines = textContent.split("\n");
+          lines.forEach((line, index) => {
+            // Create a text node for the line content (automatically escapes HTML)
+            const textNode = document.createTextNode(line);
+            div.appendChild(textNode);
+            // Add a line break between lines (but not after the last line)
+            if (index < lines.length - 1) {
+              div.appendChild(document.createElement("br"));
+            }
+          });
+          
           // replace the pre element with the new div
           preElement.replaceWith(div);
         }

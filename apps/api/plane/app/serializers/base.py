@@ -2,11 +2,101 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+import logging
 from rest_framework import serializers
+
+# =============================================================================
+# SECURITY: Mass Assignment Protection
+# =============================================================================
+# This module implements security measures to prevent mass assignment attacks.
+# 
+# Mass assignment occurs when an attacker submits data for fields they shouldn't
+# be able to modify. For example, changing `is_admin=True` or `workspace_id`.
+#
+# BEST PRACTICES:
+# 1. Always use explicit field lists instead of fields = "__all__"
+# 2. Always define read_only_fields for sensitive fields
+# 3. Use PROTECTED_FIELDS to automatically protect common sensitive fields
+# =============================================================================
+
+security_logger = logging.getLogger("plane.security")
+
+# Fields that should ALWAYS be read-only to prevent mass assignment attacks
+# These fields should never be directly writable via API requests
+PROTECTED_FIELDS = [
+    "id",
+    "created_at",
+    "updated_at",
+    "created_by",
+    "updated_by",
+    "deleted_at",
+    "is_deleted",
+]
+
+# Additional sensitive fields that should typically be read-only
+# These might be writable in specific contexts but generally should be protected
+SENSITIVE_FIELDS = [
+    "workspace",
+    "workspace_id",
+    "project",
+    "project_id",
+    "owner",
+    "owner_id",
+    "is_active",
+    "is_admin",
+    "role",
+    "token",
+    "secret_key",
+    "api_key",
+]
 
 
 class BaseSerializer(serializers.ModelSerializer):
+    """
+    Base serializer with built-in security measures.
+    
+    SECURITY FEATURES:
+    - Automatically makes 'id' read-only
+    - Warns when using fields = "__all__" without sufficient read_only_fields
+    - Validates that sensitive fields are properly protected
+    """
     id = serializers.PrimaryKeyRelatedField(read_only=True)
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._validate_field_security()
+    
+    def _validate_field_security(self):
+        """
+        Validates that the serializer has proper security configuration.
+        Logs warnings for potential security issues.
+        """
+        meta = getattr(self, 'Meta', None)
+        if not meta:
+            return
+        
+        fields = getattr(meta, 'fields', None)
+        read_only_fields = set(getattr(meta, 'read_only_fields', []))
+        
+        # Check if using __all__ without comprehensive read_only_fields
+        if fields == "__all__":
+            model = getattr(meta, 'model', None)
+            if model:
+                model_fields = set(f.name for f in model._meta.get_fields() if hasattr(f, 'name'))
+                
+                # Check for unprotected sensitive fields
+                unprotected_sensitive = []
+                for field in SENSITIVE_FIELDS:
+                    if field in model_fields and field not in read_only_fields:
+                        unprotected_sensitive.append(field)
+                
+                # Log warning if sensitive fields are not protected
+                if unprotected_sensitive:
+                    security_logger.debug(
+                        f"SECURITY: Serializer {self.__class__.__name__} uses fields='__all__' "
+                        f"with potentially unprotected sensitive fields: {unprotected_sensitive}. "
+                        f"Consider adding these to read_only_fields or using explicit field list."
+                    )
 
 
 class DynamicBaseSerializer(BaseSerializer):

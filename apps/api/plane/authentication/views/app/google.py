@@ -4,6 +4,7 @@
 
 # Python imports
 import uuid
+import secrets
 
 # Django import
 from django.http import HttpResponseRedirect
@@ -22,6 +23,30 @@ from plane.authentication.adapter.error import (
     AUTHENTICATION_ERROR_CODES,
 )
 from plane.utils.path_validator import get_safe_redirect_url
+
+
+def secure_state_compare(state1: str, state2: str) -> bool:
+    """
+    Securely compare two OAuth state values using constant-time comparison.
+    
+    SECURITY: Using regular string comparison (==, !=) for security-sensitive
+    values like OAuth state tokens is vulnerable to timing attacks. An attacker
+    could measure the time taken for comparison to gradually guess the correct
+    value character by character.
+    
+    secrets.compare_digest() performs constant-time comparison, making timing
+    attacks impractical.
+    
+    Args:
+        state1: First state value to compare
+        state2: Second state value to compare
+        
+    Returns:
+        bool: True if states match, False otherwise
+    """
+    if not state1 or not state2:
+        return False
+    return secrets.compare_digest(str(state1), str(state2))
 
 
 class GoogleOauthInitiateEndpoint(View):
@@ -64,7 +89,10 @@ class GoogleCallbackEndpoint(View):
         state = request.GET.get("state")
         next_path = request.session.get("next_path")
 
-        if state != request.session.get("state", ""):
+        # SECURITY: Use constant-time comparison to prevent timing attacks on OAuth state
+        # An attacker could use timing differences in string comparison to guess the state
+        session_state = request.session.get("state", "")
+        if not secure_state_compare(state, session_state):
             exc = AuthenticationException(
                 error_code=AUTHENTICATION_ERROR_CODES["GOOGLE_OAUTH_PROVIDER_ERROR"],
                 error_message="GOOGLE_OAUTH_PROVIDER_ERROR",
@@ -74,6 +102,10 @@ class GoogleCallbackEndpoint(View):
                 base_url=base_host(request=request, is_app=True), next_path=next_path, params=params
             )
             return HttpResponseRedirect(url)
+        
+        # SECURITY: Clear the state from session after validation to prevent reuse
+        if "state" in request.session:
+            del request.session["state"]
         if not code:
             exc = AuthenticationException(
                 error_code=AUTHENTICATION_ERROR_CODES["GOOGLE_OAUTH_PROVIDER_ERROR"],

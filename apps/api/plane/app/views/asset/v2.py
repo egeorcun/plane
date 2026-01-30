@@ -430,31 +430,51 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
 
 
 class StaticFileAssetEndpoint(BaseAPIView):
-    """This endpoint is used to get the signed URL for a static asset."""
+    """
+    This endpoint is used to get the signed URL for a static asset.
+    
+    SECURITY: This endpoint is public (AllowAny) but only serves specific
+    entity types that are intended to be publicly accessible (avatars, covers, logos).
+    Other asset types require proper authentication.
+    """
 
     permission_classes = [AllowAny]
 
-    def get(self, request, asset_id):
-        # get the asset id
-        asset = FileAsset.objects.get(id=asset_id)
+    # Allowed public entity types - these are intentionally public assets
+    ALLOWED_PUBLIC_ENTITY_TYPES = [
+        FileAsset.EntityTypeContext.USER_AVATAR,
+        FileAsset.EntityTypeContext.USER_COVER,
+        FileAsset.EntityTypeContext.WORKSPACE_LOGO,
+        FileAsset.EntityTypeContext.PROJECT_COVER,
+    ]
 
-        # Check if the asset is uploaded
-        if not asset.is_uploaded:
+    def get(self, request, asset_id):
+        """
+        Get a signed URL for a static asset.
+        
+        SECURITY: Only allows access to specific public entity types.
+        This prevents unauthorized access to private assets like issue attachments.
+        """
+        try:
+            # SECURITY: Use get() with specific filters to prevent IDOR
+            # We validate the entity_type in the query itself for defense in depth
+            asset = FileAsset.objects.get(
+                id=asset_id,
+                is_uploaded=True,
+                entity_type__in=self.ALLOWED_PUBLIC_ENTITY_TYPES
+            )
+        except FileAsset.DoesNotExist:
+            # SECURITY: Return generic error to prevent asset enumeration
             return Response(
                 {"error": "The requested asset could not be found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Check if the entity type is allowed
-        if asset.entity_type not in [
-            FileAsset.EntityTypeContext.USER_AVATAR,
-            FileAsset.EntityTypeContext.USER_COVER,
-            FileAsset.EntityTypeContext.WORKSPACE_LOGO,
-            FileAsset.EntityTypeContext.PROJECT_COVER,
-        ]:
+        # Double-check entity type (defense in depth)
+        if asset.entity_type not in self.ALLOWED_PUBLIC_ENTITY_TYPES:
             return Response(
-                {"error": "Invalid entity type.", "status": False},
-                status=status.HTTP_400_BAD_REQUEST,
+                {"error": "Access denied.", "status": False},
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         # Get the presigned URL

@@ -111,6 +111,57 @@ class APITokenLogMiddleware:
         except UnicodeDecodeError:
             return "[Could not decode content]"
 
+    def _mask_sensitive_data(self, data):
+        """
+        Mask sensitive data in strings to prevent credential leakage in logs.
+        
+        SECURITY: This function redacts sensitive information like:
+        - API keys
+        - Authorization headers
+        - Passwords
+        - Tokens
+        - Secrets
+        """
+        if data is None:
+            return None
+        
+        if not isinstance(data, str):
+            return data
+        
+        # Patterns to mask (case-insensitive)
+        sensitive_patterns = [
+            # API keys and tokens
+            (r'(X-Api-Key["\']?\s*[:=]\s*["\']?)([^"\'\s,}]+)', r'\1[REDACTED]'),
+            (r'(api[_-]?key["\']?\s*[:=]\s*["\']?)([^"\'\s,}]+)', r'\1[REDACTED]'),
+            (r'(token["\']?\s*[:=]\s*["\']?)([^"\'\s,}]+)', r'\1[REDACTED]'),
+            (r'(bearer\s+)(\S+)', r'\1[REDACTED]'),
+            # Authorization header
+            (r'(Authorization["\']?\s*[:=]\s*["\']?)([^"\'\s,}]+)', r'\1[REDACTED]'),
+            # Passwords and secrets
+            (r'(password["\']?\s*[:=]\s*["\']?)([^"\'\s,}]+)', r'\1[REDACTED]'),
+            (r'(secret["\']?\s*[:=]\s*["\']?)([^"\'\s,}]+)', r'\1[REDACTED]'),
+            # Cookie values (but keep names)
+            (r'(Cookie["\']?\s*[:=]\s*["\']?)([^"\'\n]+)', r'\1[REDACTED]'),
+            (r'(Set-Cookie["\']?\s*[:=]\s*["\']?)([^"\'\n]+)', r'\1[REDACTED]'),
+        ]
+        
+        import re
+        masked_data = data
+        for pattern, replacement in sensitive_patterns:
+            masked_data = re.sub(pattern, replacement, masked_data, flags=re.IGNORECASE)
+        
+        return masked_data
+
+    def _mask_api_key(self, api_key):
+        """
+        Mask an API key for logging, showing only a prefix for identification.
+        
+        SECURITY: Never log full API keys. Show only first 8 characters for debugging.
+        """
+        if not api_key or len(api_key) < 12:
+            return "[REDACTED]"
+        return f"{api_key[:8]}...{api_key[-4:]}"
+
     def process_request(self, request, response, request_body):
         api_key_header = "X-Api-Key"
         api_key = request.headers.get(api_key_header)
@@ -120,14 +171,22 @@ class APITokenLogMiddleware:
             return
 
         try:
+            # SECURITY: Mask sensitive data in headers and body before logging
+            masked_headers = self._mask_sensitive_data(str(request.headers))
+            masked_body = self._mask_sensitive_data(self._safe_decode_body(request_body)) if request_body else None
+            masked_response = self._mask_sensitive_data(self._safe_decode_body(response.content)) if response.content else None
+            
             log_data = {
-                "token_identifier": api_key,
+                # SECURITY: Only log masked/partial API key for identification
+                "token_identifier": self._mask_api_key(api_key),
                 "path": request.path,
                 "method": request.method,
                 "query_params": request.META.get("QUERY_STRING", ""),
-                "headers": str(request.headers),
-                "body": self._safe_decode_body(request_body) if request_body else None,
-                "response_body": self._safe_decode_body(response.content) if response.content else None,
+                # SECURITY: Log masked headers to prevent credential leakage
+                "headers": masked_headers,
+                # SECURITY: Mask sensitive data in request/response bodies
+                "body": masked_body,
+                "response_body": masked_response,
                 "response_code": response.status_code,
                 "ip_address": get_client_ip(request=request),
                 "user_agent": request.META.get("HTTP_USER_AGENT", None),

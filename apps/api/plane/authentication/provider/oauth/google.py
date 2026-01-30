@@ -4,7 +4,7 @@
 
 # Python imports
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
 import pytz
@@ -74,6 +74,12 @@ class GoogleOAuthProvider(OauthAdapter):
         )
 
     def set_token_data(self):
+        """
+        Process OAuth token response and set token data.
+        
+        SECURITY FIX: The expires_in field from Google OAuth is a duration in seconds,
+        NOT a Unix timestamp. We must add it to the current time to get the expiration.
+        """
         data = {
             "code": self.code,
             "client_id": self.client_id,
@@ -82,20 +88,37 @@ class GoogleOAuthProvider(OauthAdapter):
             "grant_type": "authorization_code",
         }
         token_response = self.get_user_token(data=data)
+        
+        # Calculate access token expiration time
+        # SECURITY: expires_in is a DURATION (seconds), not a timestamp!
+        # We need to add it to the current time to get the actual expiration datetime
+        access_token_expired_at = None
+        expires_in = token_response.get("expires_in")
+        if expires_in:
+            try:
+                # expires_in is the number of seconds until the token expires
+                access_token_expired_at = datetime.now(tz=pytz.utc) + timedelta(seconds=int(expires_in))
+            except (ValueError, TypeError):
+                # If we can't parse expires_in, leave it as None
+                pass
+        
+        # Calculate refresh token expiration if provided
+        # Note: Google typically doesn't provide refresh_token_expired_at directly
+        refresh_token_expired_at = None
+        refresh_expires_in = token_response.get("refresh_token_expired_at")
+        if refresh_expires_in:
+            try:
+                # If it's a timestamp, use it directly
+                refresh_token_expired_at = datetime.fromtimestamp(int(refresh_expires_in), tz=pytz.utc)
+            except (ValueError, TypeError):
+                pass
+        
         super().set_token_data(
             {
                 "access_token": token_response.get("access_token"),
                 "refresh_token": token_response.get("refresh_token", None),
-                "access_token_expired_at": (
-                    datetime.fromtimestamp(token_response.get("expires_in"), tz=pytz.utc)
-                    if token_response.get("expires_in")
-                    else None
-                ),
-                "refresh_token_expired_at": (
-                    datetime.fromtimestamp(token_response.get("refresh_token_expired_at"), tz=pytz.utc)
-                    if token_response.get("refresh_token_expired_at")
-                    else None
-                ),
+                "access_token_expired_at": access_token_expired_at,
+                "refresh_token_expired_at": refresh_token_expired_at,
                 "id_token": token_response.get("id_token", ""),
             }
         )

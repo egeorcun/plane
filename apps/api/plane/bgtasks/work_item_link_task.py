@@ -23,10 +23,50 @@ logger = logging.getLogger("plane.worker")
 DEFAULT_FAVICON = "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGNsYXNzPSJsdWNpZGUgbHVjaWRlLWxpbmstaWNvbiBsdWNpZGUtbGluayI+PHBhdGggZD0iTTEwIDEzYTUgNSAwIDAgMCA3LjU0LjU0bDMtM2E1IDUgMCAwIDAtNy4wNy03LjA3bC0xLjcyIDEuNzEiLz48cGF0aCBkPSJNMTQgMTFhNSA1IDAgMCAwLTcuNTQtLjU0bC0zIDNhNSA1IDAgMCAwIDcuMDcgNy4wN2wxLjcxLTEuNzEiLz48L3N2Zz4="  # noqa: E501
 
 
+def is_ip_blocked(ip_obj) -> bool:
+    """
+    Check if an IP address should be blocked for SSRF protection.
+    
+    SECURITY: This function prevents Server-Side Request Forgery (SSRF) attacks
+    by blocking requests to internal/private network addresses.
+    
+    Args:
+        ip_obj: An ipaddress.ip_address object
+        
+    Returns:
+        bool: True if the IP should be blocked, False otherwise
+    """
+    # Check common dangerous IP properties
+    if ip_obj.is_loopback:
+        return True
+    if ip_obj.is_private:
+        return True
+    if ip_obj.is_reserved:
+        return True
+    if ip_obj.is_multicast:
+        return True
+    if ip_obj.is_link_local:
+        return True
+    
+    # Explicitly block cloud metadata endpoints
+    cloud_metadata_ips = [
+        "169.254.169.254",  # AWS/GCP/Azure metadata
+        "fd00:ec2::254",    # AWS IPv6 metadata
+    ]
+    if str(ip_obj) in cloud_metadata_ips:
+        return True
+    
+    return False
+
+
 def validate_url_ip(url: str) -> None:
     """
     Validate that a URL doesn't point to a private/internal IP address.
-    Only checks if the hostname is a direct IP address.
+    
+    SECURITY FIX: This function now resolves domain names to their IP addresses
+    and checks ALL resolved IPs against blocked ranges. The previous implementation
+    only checked direct IP addresses in the URL, allowing attackers to bypass
+    protection using domain names that resolve to internal IPs.
 
     Args:
         url: The URL to validate
@@ -34,21 +74,47 @@ def validate_url_ip(url: str) -> None:
     Raises:
         ValueError: If the URL points to a private/internal IP
     """
+    import socket
+    
     parsed = urlparse(url)
     hostname = parsed.hostname
 
     if not hostname:
         return
 
+    # First, check if hostname is a direct IP address
     try:
         ip = ipaddress.ip_address(hostname)
+        if is_ip_blocked(ip):
+            raise ValueError("Access to private/internal networks is not allowed")
+        return
     except ValueError:
-        # Not an IP address (it's a domain name), nothing to check here
+        # Not a direct IP address, it's a domain name - continue to DNS resolution
+        pass
+
+    # SECURITY: Resolve domain name to IP addresses and check ALL of them
+    # This prevents DNS-based SSRF bypasses where a domain resolves to internal IPs
+    try:
+        ip_addresses = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        # If we can't resolve the hostname, we'll let the request fail naturally
+        # Don't block here as it might be a temporary DNS issue
         return
 
-    # It IS an IP address - check if it's private/internal
-    if ip.is_private or ip.is_loopback or ip.is_reserved:
-        raise ValueError("Access to private/internal networks is not allowed")
+    for addr in ip_addresses:
+        try:
+            ip = ipaddress.ip_address(addr[4][0])
+            if is_ip_blocked(ip):
+                raise ValueError(
+                    f"Access to private/internal networks is not allowed. "
+                    f"Domain '{hostname}' resolves to blocked IP: {ip}"
+                )
+        except ValueError as e:
+            # Re-raise our security errors
+            if "private/internal" in str(e):
+                raise
+            # Skip malformed IP addresses
+            continue
 
 
 def crawl_work_item_link_title_and_favicon(url: str) -> Dict[str, Any]:
