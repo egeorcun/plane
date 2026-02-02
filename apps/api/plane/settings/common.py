@@ -63,6 +63,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "plane.middleware.security_headers.SecurityHeadersMiddleware",  # SECURITY: Adds CSP and other headers
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "plane.authentication.middleware.session.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -149,15 +150,16 @@ if cors_allowed_origins:
     secure_origins = False if [origin for origin in cors_allowed_origins if "http:" in origin] else True
     CORS_ALLOW_ALL_ORIGINS = False  # SECURITY: Explicitly set to False when origins are specified
 else:
-    # SECURITY WARNING: Allow all origins only in development/local environment
-    # The production.py settings should override this and enforce proper CORS
+    # SECURITY: Default to restrictive CORS - require explicit configuration
+    # This prevents accidental exposure in production deployments
     import warnings
     warnings.warn(
-        "CORS_ALLOWED_ORIGINS is not set. CORS will allow all origins. "
-        "This is INSECURE for production. Set CORS_ALLOWED_ORIGINS environment variable.",
+        "CORS_ALLOWED_ORIGINS is not set. CORS is disabled by default. "
+        "Set CORS_ALLOWED_ORIGINS environment variable to enable cross-origin requests.",
         UserWarning
     )
-    CORS_ALLOW_ALL_ORIGINS = True
+    CORS_ALLOW_ALL_ORIGINS = False  # SECURITY: Never allow all origins by default
+    CORS_ALLOWED_ORIGINS = []  # Empty list = no cross-origin requests allowed
     secure_origins = False
 
 CORS_ALLOW_HEADERS = [*default_headers, "X-API-Key"]
@@ -342,9 +344,17 @@ SKIP_ENV_VAR = os.environ.get("SKIP_ENV_VAR", "1") == "1"
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = int(os.environ.get("FILE_SIZE_LIMIT", 5242880))
 
-# Cookie Settings
+# =============================================================================
+# COOKIE SECURITY SETTINGS
+# =============================================================================
+# SECURITY: Session cookies are configured for maximum security:
+# - HttpOnly: Prevents JavaScript access (XSS protection)
+# - Secure: Only sent over HTTPS
+# - SameSite: Prevents cross-site request forgery
+# =============================================================================
 SESSION_COOKIE_SECURE = secure_origins
 SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"  # SECURITY: Prevents CSRF by not sending cookies on cross-site requests
 SESSION_ENGINE = "plane.db.models.session"
 SESSION_COOKIE_AGE = int(os.environ.get("SESSION_COOKIE_AGE", 604800))
 SESSION_COOKIE_NAME = os.environ.get("SESSION_COOKIE_NAME", "session-id")
@@ -358,6 +368,7 @@ ADMIN_SESSION_COOKIE_AGE = int(os.environ.get("ADMIN_SESSION_COOKIE_AGE", 3600))
 # CSRF cookies
 CSRF_COOKIE_SECURE = secure_origins
 CSRF_COOKIE_HTTPONLY = True
+CSRF_COOKIE_SAMESITE = "Lax"  # SECURITY: Consistent with session cookie SameSite policy
 # CSRF_TRUSTED_ORIGINS: First check env var, then fall back to CORS origins
 csrf_trusted_origins_raw = os.environ.get("CSRF_TRUSTED_ORIGINS", "")
 csrf_trusted_origins = [origin.strip() for origin in csrf_trusted_origins_raw.split(",") if origin.strip()]

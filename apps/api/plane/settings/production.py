@@ -187,6 +187,31 @@ SECURE_BROWSER_XSS_FILTER = True
 SECURE_REFERRER_POLICY = os.environ.get("SECURE_REFERRER_POLICY", "strict-origin-when-cross-origin")
 
 # =============================================================================
+# CONTENT SECURITY POLICY (CSP)
+# =============================================================================
+# CSP helps prevent XSS attacks by controlling which resources can be loaded.
+# Note: Django doesn't have built-in CSP support, but we define the policy here
+# for use with django-csp or manual header configuration in middleware/proxy.
+# =============================================================================
+# CSP Policy: Restrictive by default, can be overridden via environment variable
+# Format: directive1 value1 value2; directive2 value1;
+CSP_POLICY = os.environ.get(
+    "CSP_POLICY",
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "  # unsafe-inline/eval needed for React
+    "style-src 'self' 'unsafe-inline'; "  # inline styles needed for UI frameworks
+    "img-src 'self' data: blob: https:; "  # allow images from any https source
+    "font-src 'self' data:; "
+    "connect-src 'self' wss: https:; "  # websockets and API calls
+    "frame-ancestors 'none'; "  # equivalent to X-Frame-Options: DENY
+    "base-uri 'self'; "
+    "form-action 'self';"
+)
+
+# Cross-Origin policies for additional security
+SECURE_CROSS_ORIGIN_OPENER_POLICY = os.environ.get("SECURE_CROSS_ORIGIN_OPENER_POLICY", "same-origin")
+
+# =============================================================================
 # CORS ENFORCEMENT FOR PRODUCTION
 # =============================================================================
 # Override common.py CORS settings to be more restrictive in production
