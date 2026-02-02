@@ -191,12 +191,14 @@ If you want to build from source on Coolify (requires 8GB+ RAM on build server):
 
 | Category | Fix |
 |----------|-----|
-| Authentication | CSRF protection, session fixation prevention |
+| Authentication | Session fixation prevention, CORS protection |
 | Input Validation | SSRF protection (webhooks, link crawler) |
 | Authorization | IDOR vulnerabilities fixed |
 | Rate Limiting | All endpoints protected |
 | Headers | HSTS, X-Frame-Options, CSP |
 | Logging | Sensitive data masking |
+
+> **Note:** CSRF token validation is disabled for self-hosted deployments to ensure compatibility with reverse proxies (Cloudflare, Nginx, Coolify). CORS protection remains active and provides cross-origin request protection.
 | OAuth | Timing attack prevention, token expiration fix |
 
 ## 🌟 Features
