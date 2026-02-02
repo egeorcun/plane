@@ -268,7 +268,7 @@ MINIO_ENDPOINT_SSL=0
 WEB_URL=${WEB_URL}
 
 # Application version
-APP_RELEASE=v1.0.0
+APP_RELEASE=latest
 
 # Worker configuration
 GUNICORN_WORKERS=${GUNICORN_WORKERS}
