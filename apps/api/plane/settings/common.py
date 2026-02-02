@@ -84,7 +84,8 @@ MIDDLEWARE = [
 # Both anonymous and authenticated users have rate limits.
 # =============================================================================
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": ("rest_framework.authentication.SessionAuthentication",),
+    # Use custom session auth with CSRF disabled for self-hosted deployments
+    "DEFAULT_AUTHENTICATION_CLASSES": ("plane.authentication.session.BaseSessionAuthentication",),
     "DEFAULT_THROTTLE_CLASSES": (
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",  # SECURITY: Added rate limiting for authenticated users
