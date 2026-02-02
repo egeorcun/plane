@@ -65,7 +65,9 @@ This fork includes comprehensive security fixes. Choose your deployment method b
 
 ---
 
-### Method 1: Standalone Docker Compose (Recommended)
+### Method 1: Standalone with Pre-built Images (Recommended - Fast!)
+
+Uses pre-built images from GitHub Container Registry. No build required - deploys in 2-3 minutes!
 
 ```bash
 # 1. Clone and checkout
@@ -76,7 +78,34 @@ git checkout preview
 # 2. Run the setup script (auto-generates secure passwords)
 ./setup-env.sh
 
-# 3. Build and deploy
+# 3. Deploy (fast - just pulls images!)
+docker compose -f docker-compose.ghcr.yml up -d
+
+# 4. Check status
+docker compose -f docker-compose.ghcr.yml ps
+docker compose -f docker-compose.ghcr.yml logs -f
+
+# 5. Update to latest version
+docker compose -f docker-compose.ghcr.yml pull
+docker compose -f docker-compose.ghcr.yml up -d
+```
+
+---
+
+### Method 2: Standalone with Build from Source
+
+Builds images from source. Takes longer (15-20 min) but useful if you want to modify the code.
+
+```bash
+# 1. Clone and checkout
+git clone https://github.com/egeorcun/plane.git
+cd plane
+git checkout preview
+
+# 2. Run the setup script (auto-generates secure passwords)
+./setup-env.sh
+
+# 3. Build and deploy (slow - builds everything)
 docker compose -f docker-compose.production.yml up -d --build
 
 # 4. Check status
@@ -92,7 +121,7 @@ The setup script will:
 
 ---
 
-### Method 2: Coolify Deployment (Recommended - Pre-built Images)
+### Method 3: Coolify Deployment (Pre-built Images)
 
 Uses pre-built images from GitHub Container Registry - fast deployment, no build required!
 
@@ -120,9 +149,9 @@ Uses pre-built images from GitHub Container Registry - fast deployment, no build
    | `SERVICE_USER_MINIO` | MinIO access key |
    | `SERVICE_PASSWORD_MINIO` | MinIO secret key |
 
-### Method 3: Coolify with Build from Source
+### Method 4: Coolify with Build from Source
 
-If you want to build from source (requires 8GB+ RAM on build server):
+If you want to build from source on Coolify (requires 8GB+ RAM on build server):
 
 1. Use **`docker-compose.production.yml`** instead
 2. Increase Coolify's build timeout and memory limits
