@@ -69,6 +69,7 @@ x-app-env: &app-env
 services:
   proxy:
     image: 'ghcr.io/egeorcun/plane-proxy:${APP_RELEASE:-latest}'
+    pull_policy: always
     environment:
       # Coolify magic variable - auto-generated from domain config
       - SERVICE_URL_PROXY
@@ -90,6 +91,7 @@ services:
 
   web:
     image: 'ghcr.io/egeorcun/plane-web:${APP_RELEASE:-latest}'
+    pull_policy: always
     depends_on:
       - api
     healthcheck:
@@ -100,6 +102,7 @@ services:
 
   space:
     image: 'ghcr.io/egeorcun/plane-space:${APP_RELEASE:-latest}'
+    pull_policy: always
     depends_on:
       - api
       - web
@@ -111,6 +114,7 @@ services:
 
   admin:
     image: 'ghcr.io/egeorcun/plane-admin:${APP_RELEASE:-latest}'
+    pull_policy: always
     depends_on:
       - api
       - web
@@ -122,6 +126,7 @@ services:
 
   live:
     image: 'ghcr.io/egeorcun/plane-live:${APP_RELEASE:-latest}'
+    pull_policy: always
     environment:
       <<: [*live-env, *redis-env]
     depends_on:
@@ -136,6 +141,7 @@ services:
 
   api:
     image: 'ghcr.io/egeorcun/plane-backend:${APP_RELEASE:-latest}'
+    pull_policy: always
     command: ./bin/docker-entrypoint-api.sh
     volumes:
       - logs_api:/code/plane/logs
@@ -153,6 +159,7 @@ services:
 
   worker:
     image: 'ghcr.io/egeorcun/plane-backend:${APP_RELEASE:-latest}'
+    pull_policy: always
     command: ./bin/docker-entrypoint-worker.sh
     volumes:
       - logs_worker:/code/plane/logs
@@ -171,6 +178,7 @@ services:
 
   beat-worker:
     image: 'ghcr.io/egeorcun/plane-backend:${APP_RELEASE:-latest}'
+    pull_policy: always
     command: ./bin/docker-entrypoint-beat.sh
     volumes:
       - logs_beat:/code/plane/logs
@@ -189,6 +197,7 @@ services:
 
   migrator:
     image: 'ghcr.io/egeorcun/plane-backend:${APP_RELEASE:-latest}'
+    pull_policy: always
     restart: 'no'
     command: ./bin/docker-entrypoint-migrator.sh
     volumes:
