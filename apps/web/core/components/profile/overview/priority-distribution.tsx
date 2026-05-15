@@ -33,7 +33,7 @@ export function ProfilePriorityDistribution({ userProfile }: Props) {
         <Card>
           {userProfile.priority_distribution.length > 0 ? (
             <BarChart
-              className="w-full h-[300px]"
+              className="h-[300px] w-full"
               margin={{ top: 20, right: 30, bottom: 5, left: 0 }}
               data={userProfile.priority_distribution.map((priority) => ({
                 key: priority.priority ?? "None",
@@ -54,7 +54,7 @@ export function ProfilePriorityDistribution({ userProfile }: Props) {
               ]}
               xAxis={{
                 key: "name",
-                label: t("profile.stats.priority_distribution.priority"),
+                label: t("common.priority"),
               }}
               yAxis={{
                 key: "count",

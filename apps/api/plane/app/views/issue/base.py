@@ -99,6 +99,7 @@ class IssueListEndpoint(BaseAPIView):
         # Apply legacy filters
         filters = issue_filters(request.query_params, "GET")
         issue_queryset = queryset.filter(**filters)
+        issue_queryset = issue_queryset.filter(state__deleted_at__isnull=True)
 
         # Add select_related, prefetch_related if fields or expand is not None
         if self.fields or self.expand:
@@ -157,7 +158,7 @@ class IssueListEndpoint(BaseAPIView):
         )
 
         if self.fields or self.expand:
-            issues = IssueSerializer(queryset, many=True, fields=self.fields, expand=self.expand).data
+            issues = IssueSerializer(issue_queryset, many=True, fields=self.fields, expand=self.expand).data
         else:
             issues = issue_queryset.values(
                 "id",
@@ -1118,7 +1119,7 @@ class IssueBulkUpdateDateEndpoint(BaseAPIView):
         epoch = int(timezone.now().timestamp())
 
         # Fetch all relevant issues in a single query
-        issues = list(Issue.objects.filter(id__in=issue_ids))
+        issues = list(Issue.objects.filter(id__in=issue_ids, workspace__slug=slug, project_id=project_id))
         issues_dict = {str(issue.id): issue for issue in issues}
         issues_to_update = []
 

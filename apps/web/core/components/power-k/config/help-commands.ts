@@ -5,13 +5,10 @@
  */
 
 import { FileText, GithubIcon, MessageSquare, Rocket } from "lucide-react";
-// plane imports
-import { DiscordIcon } from "@plane/propel/icons";
 // components
 import type { TPowerKCommandConfig } from "@/components/power-k/core/types";
 // hooks
 import { usePowerK } from "@/hooks/store/use-power-k";
-import { useChatSupport } from "@/hooks/use-chat-support";
 
 /**
  * Help commands - Help related commands
@@ -19,7 +16,6 @@ import { useChatSupport } from "@/hooks/use-chat-support";
 export const usePowerKHelpCommands = (): TPowerKCommandConfig[] => {
   // store
   const { toggleShortcutsListModal } = usePowerK();
-  const { isEnabled: isChatSupportEnabled, openChatSupport } = useChatSupport();
 
   return [
     {
@@ -48,13 +44,13 @@ export const usePowerKHelpCommands = (): TPowerKCommandConfig[] => {
       closeOnSelect: true,
     },
     {
-      id: "join_discord",
+      id: "join_forum",
       type: "action",
       group: "help",
-      i18n_title: "power_k.help_actions.join_discord",
-      icon: DiscordIcon,
+      i18n_title: "power_k.help_actions.join_forum",
+      icon: MessageSquare,
       action: () => {
-        window.open("https://discord.com/invite/A92xrEGCge", "_blank", "noopener,noreferrer");
+        window.open("https://forum.plane.so", "_blank", "noopener,noreferrer");
       },
       isEnabled: () => true,
       isVisible: () => true,
@@ -71,17 +67,6 @@ export const usePowerKHelpCommands = (): TPowerKCommandConfig[] => {
       },
       isEnabled: () => true,
       isVisible: () => true,
-      closeOnSelect: true,
-    },
-    {
-      id: "chat_with_us",
-      type: "action",
-      group: "help",
-      i18n_title: "power_k.help_actions.chat_with_us",
-      icon: MessageSquare,
-      action: () => openChatSupport(),
-      isEnabled: () => isChatSupportEnabled,
-      isVisible: () => isChatSupportEnabled,
       closeOnSelect: true,
     },
   ];

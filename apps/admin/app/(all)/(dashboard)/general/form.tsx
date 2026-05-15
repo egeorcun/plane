@@ -16,8 +16,6 @@ import { Input, ToggleSwitch } from "@plane/ui";
 import { ControllerInput } from "@/components/common/controller-input";
 // hooks
 import { useInstance } from "@/hooks/store";
-// components
-import { IntercomConfig } from "./intercom";
 
 export interface IGeneralConfigurationForm {
   instance: IInstance;
@@ -27,14 +25,13 @@ export interface IGeneralConfigurationForm {
 export const GeneralConfigurationForm = observer(function GeneralConfigurationForm(props: IGeneralConfigurationForm) {
   const { instance, instanceAdmins } = props;
   // hooks
-  const { instanceConfigurations, updateInstanceInfo, updateInstanceConfigurations } = useInstance();
+  const { updateInstanceInfo } = useInstance();
 
   // form data
   const {
     handleSubmit,
     control,
     formState: { errors, isSubmitting },
-    watch,
   } = useForm<Partial<IInstance>>({
     defaultValues: {
       instance_name: instance?.instance_name,
@@ -44,17 +41,6 @@ export const GeneralConfigurationForm = observer(function GeneralConfigurationFo
 
   const onSubmit = async (formData: Partial<IInstance>) => {
     const payload: Partial<IInstance> = { ...formData };
-
-    // update the intercom configuration
-    const isIntercomEnabled =
-      instanceConfigurations?.find((config) => config.key === "IS_INTERCOM_ENABLED")?.value === "1";
-    if (!payload.is_telemetry_enabled && isIntercomEnabled) {
-      try {
-        await updateInstanceConfigurations({ IS_INTERCOM_ENABLED: "0" });
-      } catch (error) {
-        console.error(error);
-      }
-    }
 
     await updateInstanceInfo(payload)
       .then(() =>
@@ -112,18 +98,17 @@ export const GeneralConfigurationForm = observer(function GeneralConfigurationFo
       </div>
 
       <div className="space-y-6">
-        <div className="text-16 font-medium text-primary pb-1.5 border-b border-subtle">Chat + telemetry</div>
-        <IntercomConfig isTelemetryEnabled={watch("is_telemetry_enabled") ?? false} />
+        <div className="border-b border-subtle pb-1.5 text-16 font-medium text-primary">Telemetry</div>
         <div className="flex items-center gap-14">
-          <div className="grow flex items-center gap-4">
+          <div className="flex grow items-center gap-4">
             <div className="shrink-0">
-              <div className="flex items-center justify-center size-11 bg-layer-1 rounded-lg">
+              <div className="flex size-11 items-center justify-center rounded-lg bg-layer-1">
                 <Telescope className="size-5 text-tertiary" />
               </div>
             </div>
             <div className="grow">
-              <div className="text-13 font-medium text-primary leading-5">Let Plane collect anonymous usage data</div>
-              <div className="text-11 font-regular text-tertiary leading-5">
+              <div className="text-13 leading-5 font-medium text-primary">Let Plane collect anonymous usage data</div>
+              <div className="text-11 leading-5 font-regular text-tertiary">
                 No PII is collected.This anonymized data is used to understand how you use Plane and build new features
                 in line with{" "}
                 <a

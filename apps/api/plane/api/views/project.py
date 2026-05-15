@@ -6,8 +6,9 @@
 import json
 
 # Django imports
-from django.db import IntegrityError
-from django.db.models import Exists, F, Func, OuterRef, Prefetch, Q, Subquery
+from django.db import IntegrityError, transaction
+from django.db.models import Exists, F, Func, OuterRef, Prefetch, Q, Subquery, Count
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django.core.serializers.json import DjangoJSONEncoder
 
@@ -22,7 +23,6 @@ from drf_spectacular.utils import OpenApiResponse, OpenApiRequest
 from plane.db.models import (
     Cycle,
     Intake,
-    ProjectUserProperty,
     Module,
     Project,
     DeployBoard,
@@ -31,8 +31,14 @@ from plane.db.models import (
     DEFAULT_STATES,
     Workspace,
     UserFavorite,
+    Label,
+    Issue,
+    StateGroup,
+    IntakeIssue,
+    ProjectPage,
 )
 from plane.bgtasks.webhook_task import model_activity, webhook_activity
+from plane.utils.exception_logger import log_exception
 from .base import BaseAPIView
 from plane.utils.host import base_host
 from plane.api.serializers import (
@@ -40,7 +46,7 @@ from plane.api.serializers import (
     ProjectCreateSerializer,
     ProjectUpdateSerializer,
 )
-from plane.app.permissions import ProjectBasePermission
+from plane.app.permissions import ProjectBasePermission, WorkSpaceAdminPermission
 from plane.utils.openapi import (
     project_docs,
     PROJECT_ID_PARAMETER,
@@ -183,9 +189,9 @@ class ProjectListCreateAPIEndpoint(BaseAPIView):
         return self.paginate(
             request=request,
             queryset=(projects),
-            on_results=lambda projects: ProjectSerializer(
-                projects, many=True, fields=self.fields, expand=self.expand
-            ).data,
+            on_results=lambda projects: (
+                ProjectSerializer(projects, many=True, fields=self.fields, expand=self.expand).data
+            ),
         )
 
     @project_docs(
@@ -218,48 +224,72 @@ class ProjectListCreateAPIEndpoint(BaseAPIView):
             serializer = ProjectCreateSerializer(data={**request.data}, context={"workspace_id": workspace.id})
 
             if serializer.is_valid():
-                serializer.save()
+                with transaction.atomic():
+                    serializer.save()
 
-                # Add the user as Administrator to the project
-                _ = ProjectMember.objects.create(project_id=serializer.instance.id, member=request.user, role=20)
+                    # Add the creator as Administrator of the project.
+                    _ = ProjectMember.objects.create(project_id=serializer.instance.id, member=request.user, role=20)
 
-                if serializer.instance.project_lead is not None and str(serializer.instance.project_lead) != str(
-                    request.user.id
-                ):
-                    ProjectMember.objects.create(
-                        project_id=serializer.instance.id,
-                        member_id=serializer.instance.project_lead,
-                        role=20,
+                    # If a different project_lead was provided, add them as
+                    # Administrator too. Use project_lead_id (the FK column)
+                    # rather than project_lead (the related descriptor, which
+                    # would resolve to a User instance and break UUID coercion
+                    # downstream in ProjectMember.objects.create).
+                    if (
+                        serializer.instance.project_lead_id is not None
+                        and serializer.instance.project_lead_id != request.user.id
+                    ):
+                        ProjectMember.objects.create(
+                            project_id=serializer.instance.id,
+                            member_id=serializer.instance.project_lead_id,
+                            role=20,
+                        )
+
+                    State.objects.bulk_create(
+                        [
+                            State(
+                                name=state["name"],
+                                color=state["color"],
+                                project=serializer.instance,
+                                sequence=state["sequence"],
+                                workspace=serializer.instance.workspace,
+                                group=state["group"],
+                                default=state.get("default", False),
+                                created_by=request.user,
+                            )
+                            for state in DEFAULT_STATES
+                        ]
                     )
 
-                State.objects.bulk_create(
-                    [
-                        State(
-                            name=state["name"],
-                            color=state["color"],
-                            project=serializer.instance,
-                            sequence=state["sequence"],
-                            workspace=serializer.instance.workspace,
-                            group=state["group"],
-                            default=state.get("default", False),
-                            created_by=request.user,
+                    project = self.get_queryset().filter(pk=serializer.instance.id).first()
+
+                    # Defer the activity-log task until the surrounding
+                    # transaction commits, so it never fires on a rolled-back
+                    # creation.
+                    # robust=True so broker / dispatch failures are logged
+                    # internally by Django and don't surface as 500 after a
+                    # successful commit (the inverse of the rollback path
+                    # covered by test_model_activity_not_called_on_rollback).
+                    # A nested function (rather than functools.partial) is
+                    # used here because Django's robust on_commit logging
+                    # path reads ``func.__qualname__`` to format the error
+                    # message; ``partial`` objects don't have that dunder
+                    # by default and the workaround is brittle when the
+                    # wrapped callable is a mock. The closure captures
+                    # the locals at construction time and they are never
+                    # rebound, so late-binding is not a hazard here.
+                    def _dispatch_model_activity():
+                        model_activity.delay(
+                            model_name="project",
+                            model_id=str(project.id),
+                            requested_data=request.data,
+                            current_instance=None,
+                            actor_id=request.user.id,
+                            slug=slug,
+                            origin=base_host(request=request, is_app=True),
                         )
-                        for state in DEFAULT_STATES
-                    ]
-                )
 
-                project = self.get_queryset().filter(pk=serializer.instance.id).first()
-
-                # Model activity
-                model_activity.delay(
-                    model_name="project",
-                    model_id=str(project.id),
-                    requested_data=request.data,
-                    current_instance=None,
-                    actor_id=request.user.id,
-                    slug=slug,
-                    origin=base_host(request=request, is_app=True),
-                )
+                    transaction.on_commit(_dispatch_model_activity, robust=True)
 
                 serializer = ProjectSerializer(project)
                 return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -270,12 +300,33 @@ class ProjectListCreateAPIEndpoint(BaseAPIView):
                     {"name": "The project name is already taken"},
                     status=status.HTTP_409_CONFLICT,
                 )
+            # Any other IntegrityError is unexpected: log it the same way
+            # the catch-all `except Exception` below would and return the
+            # same generic 500 so the client gets a uniform error shape.
+            # `raise` here would not fall through to a sibling except
+            # clause — it would exit the try/except entirely and bypass
+            # both the logging and the JSON response.
+            log_exception(e)
+            return Response(
+                {"error": "An unexpected error occurred"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
         except Workspace.DoesNotExist:
             return Response({"error": "Workspace does not exist"}, status=status.HTTP_404_NOT_FOUND)
         except ValidationError:
             return Response(
                 {"identifier": "The project identifier is already taken"},
                 status=status.HTTP_409_CONFLICT,
+            )
+        except Exception as e:
+            # Unexpected server-side failure: log the traceback and return a
+            # generic 500 so the client can distinguish it from a 4xx caused
+            # by bad input. Returning 400 here was the anti-pattern that
+            # masked the original ghost-create bug.
+            log_exception(e)
+            return Response(
+                {"error": "An unexpected error occurred"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
 
@@ -549,3 +600,119 @@ class ProjectArchiveUnarchiveAPIEndpoint(BaseAPIView):
         project.archived_at = None
         project.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+ALLOWED_PROJECT_SUMMARY_FIELDS = [
+    "members",
+    "states",
+    "labels",
+    "cycles",
+    "modules",
+    "issues",
+    "intakes",
+    "pages",
+]
+
+
+class ProjectSummaryAPIEndpoint(BaseAPIView):
+    permission_classes = [WorkSpaceAdminPermission]
+    use_read_replica = True
+
+    def get(self, request, slug, project_id):
+        """Get project summary
+
+        Get the summary of a project
+        """
+        project = Project.objects.filter(pk=project_id, workspace__slug=slug).first()
+        if not project:
+            return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+        fields = request.GET.get("fields", "").split(",")
+        requested_fields = set(filter(None, (f.strip() for f in fields))) & set(ALLOWED_PROJECT_SUMMARY_FIELDS)
+        if not requested_fields:
+            requested_fields = set(ALLOWED_PROJECT_SUMMARY_FIELDS)
+
+        # Single DB round-trip with only requested count subqueries
+        counts = self._get_all_summary_counts(project_id, requested_fields)
+        counts_dict = {field: counts[field] for field in requested_fields}
+        summary = {
+            "id": project.id,
+            "name": project.name,
+            "identifier": project.identifier,
+            "counts": counts_dict,
+        }
+        return Response(summary, status=status.HTTP_200_OK)
+
+    # Getting all summary counts in one ORM query; only runs subqueries for requested fields.
+    def _get_all_summary_counts(self, project_id, requested_fields):
+        """Return requested summary counts in one ORM query; only runs subqueries for requested fields."""
+
+        # Using a different annotation name for 'pages' to avoid conflict with Project.pages (M2M from Page)
+        def _annotation_name(field):
+            return "pages_count" if field == "pages" else field
+
+        subquery_builders = {
+            "members": lambda: (
+                ProjectMember.objects.filter(project_id=OuterRef("pk"), is_active=True)
+                .values("project_id")
+                .annotate(count=Count("*"))
+                .values("count")
+            ),
+            "states": lambda: (
+                State.objects.filter(project_id=OuterRef("pk"))
+                .values("project_id")
+                .annotate(count=Count("*"))
+                .values("count")
+            ),
+            "labels": lambda: (
+                Label.objects.filter(project_id=OuterRef("pk"))
+                .values("project_id")
+                .annotate(count=Count("*"))
+                .values("count")
+            ),
+            "cycles": lambda: (
+                Cycle.objects.filter(project_id=OuterRef("pk"))
+                .values("project_id")
+                .annotate(count=Count("*"))
+                .values("count")
+            ),
+            "modules": lambda: (
+                Module.objects.filter(project_id=OuterRef("pk"))
+                .values("project_id")
+                .annotate(count=Count("*"))
+                .values("count")
+            ),
+            "issues": lambda: (
+                Issue.objects.filter(project_id=OuterRef("pk"))
+                .exclude(state__group=StateGroup.TRIAGE.value)
+                .values("project_id")
+                .annotate(count=Count("*"))
+                .values("count")
+            ),
+            "intakes": lambda: (
+                IntakeIssue.objects.filter(project_id=OuterRef("pk"))
+                .values("project_id")
+                .annotate(count=Count("*"))
+                .values("count")
+            ),
+            "pages": lambda: (
+                ProjectPage.objects.filter(project_id=OuterRef("pk"))
+                .values("project_id")
+                .annotate(count=Count("*"))
+                .values("count")
+            ),
+        }
+
+        # Build annotations dictionary for the requested fields
+        annotations = {
+            _annotation_name(field): Coalesce(Subquery(subquery_builders[field]()), 0) for field in requested_fields
+        }
+
+        # Prepare values list for the annotation names
+        fields_list = sorted(requested_fields)
+        values_list = [_annotation_name(f) for f in fields_list]
+        # Execute the query and get the result
+        query_result = Project.objects.filter(pk=project_id).annotate(**annotations).values(*values_list).first()
+        if not query_result:
+            return {field: 0 for field in requested_fields}
+        # Return the result as a dictionary
+        return {field: query_result[_annotation_name(field)] for field in requested_fields}

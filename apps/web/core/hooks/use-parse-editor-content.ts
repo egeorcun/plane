@@ -235,7 +235,7 @@ export const useParseEditorContent = (args: TArgs) => {
     (htmlContent: string): TCustomComponentsMetaData => {
       const parser = new DOMParser();
       const doc = parser.parseFromString(htmlContent, "text/html");
-      const imageMetaData: TCustomComponentsMetaData["file_assets"] = [];
+      const filesMetaData: TCustomComponentsMetaData["file_assets"] = [];
       // process image components
       const imageComponents = doc.querySelectorAll("image-component");
       imageComponents.forEach((element) => {
@@ -249,7 +249,7 @@ export const useParseEditorContent = (args: TArgs) => {
                 workspaceSlug,
               });
           if (assetSrc) {
-            imageMetaData.push({
+            filesMetaData.push({
               id: src,
               name: src,
               url: assetSrc,
@@ -278,7 +278,7 @@ export const useParseEditorContent = (args: TArgs) => {
       });
 
       return {
-        file_assets: imageMetaData,
+        file_assets: filesMetaData,
         user_mentions: userMentions,
       };
     },

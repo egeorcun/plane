@@ -5,7 +5,7 @@
  */
 
 import { logger } from "@plane/logger";
-import type { TPage, TDocumentPayload } from "@plane/types";
+import type { TDocumentPayload, TPage } from "@plane/types";
 // services
 import { AppError } from "@/lib/errors";
 import { APIService } from "../api.service";
